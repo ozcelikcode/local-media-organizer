@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Date Fixer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cream: {
+                            50: '#FDFBF7',
+                            100: '#F7F3E8',
+                            200: '#EBE0D0',
+                            300: '#DCC8B3',
+                            800: '#5C4D3C',
+                            900: '#4A4036',
+                        },
+                        accent: {
+                            500: '#A68A64',
+                            600: '#8C7352',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] {
+            display: none !important;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #F7F3E8;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #DCC8B3;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #A68A64;
+        }
+    </style>
+</head>
+
+<body class="bg-cream-50 text-cream-900 font-sans h-screen flex flex-col overflow-hidden" x-data="dateFixer()">
+
+    <!-- Header -->
+    <header class="bg-cream-100 border-b border-cream-200 p-4 shadow-sm flex justify-between items-center z-20">
+        <div class="flex items-center space-x-4">
+            <a href="/" class="flex items-center text-cream-600 hover:text-accent-600 transition-colors">
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                <span class="font-medium">Back</span>
+            </a>
+            <h1 class="text-xl font-bold tracking-tight text-cream-900">Metadata Editor</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center space-x-2" x-show="processing" x-transition>
+                <svg class="animate-spin h-5 w-5 text-accent-600" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z">
+                    </path>
+                </svg>
+                <span class="text-sm font-medium text-cream-800">Processing...</span>
+            </div>
+            <div
+                class="text-xs font-mono text-cream-500 flex space-x-4 bg-white px-3 py-1.5 rounded-full border border-cream-200">
+                <span><strong class="text-accent-600">CTRL+Click</strong> Multi</span>
+                <span><strong class="text-accent-600">SHIFT+Click</strong> Range</span>
+                <span><strong class="text-accent-600">CTRL+A</strong> All</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Sidebar -->
+        <aside
+            class="w-80 bg-cream-100 border-r border-cream-200 flex flex-col p-6 space-y-6 overflow-y-auto z-10 shadow-inner">
+
+            <!-- Target -->
+            <div class="space-y-3">
+                <label class="text-xs font-bold text-cream-500 uppercase tracking-widest">Source Folder</label>
+                <div class="flex space-x-2">
+                    <input type="text" x-model="scanPath"
+                        class="w-full bg-white text-sm border-cream-300 rounded-lg p-2.5 shadow-sm focus:ring-accent-500 focus:border-accent-500 focus:outline-none">
+                    <button @click="scan()" :disabled="processing"
+                        class="bg-accent-600 hover:bg-accent-500 text-white px-3 rounded-lg shadow-sm transition-colors">Scan</button>
+                </div>
+            </div>
+
+            <hr class="border-cream-300 border-dashed">
+
+            <div class="space-y-6" x-show="files.length > 0" x-cloak>
+
+                <!-- Selection Info -->
+                <div class="flex justify-between items-end border-b border-cream-200 pb-2">
+                    <h3 class="text-sm font-bold text-cream-800">Configuration</h3>
+                    <p class="text-xs text-accent-600 font-medium"><span x-text="selectedIndices.size"></span> selected
+                    </p>
+                </div>
+
+                <!-- Mode Selection -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-cream-500 uppercase tracking-widest">Date Source</label>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button @click="mode = 'exif'"
+                            class="relative flex justify-between items-center px-4 py-3 rounded-lg border text-sm font-medium transition-all"
+                            :class="mode === 'exif' ? 'bg-white border-accent-500 ring-1 ring-accent-500 text-accent-700 shadow-sm' : 'bg-cream-50 border-cream-200 text-cream-600 hover:bg-white'">
+                            <span>EXIF Data</span>
+                            <span class="text-[10px] uppercase opacity-60">Camera</span>
+                        </button>
+
+                        <button @click="mode = 'filename'"
+                            class="relative flex justify-between items-center px-4 py-3 rounded-lg border text-sm font-medium transition-all"
+                            :class="mode === 'filename' ? 'bg-white border-accent-500 ring-1 ring-accent-500 text-accent-700 shadow-sm' : 'bg-cream-50 border-cream-200 text-cream-600 hover:bg-white'">
+                            <span>Filename</span>
+                            <span class="text-[10px] uppercase opacity-60">Pattern</span>
+                        </button>
+
+                        <button @click="mode = 'manual'"
+                            class="relative flex justify-between items-center px-4 py-3 rounded-lg border text-sm font-medium transition-all"
+                            :class="mode === 'manual' ? 'bg-white border-accent-500 ring-1 ring-accent-500 text-accent-700 shadow-sm' : 'bg-cream-50 border-cream-200 text-cream-600 hover:bg-white'">
+                            <span>Manual</span>
+                            <span class="text-[10px] uppercase opacity-60">Custom</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Manual Input -->
+                <div x-show="mode === 'manual'" x-transition
+                    class="bg-white p-3 rounded-lg border border-cream-200 shadow-sm space-y-2">
+                    <label class="text-xs text-cream-500 uppercase font-bold">Set Date To</label>
+                    <input type="datetime-local" x-model="manualDate"
+                        class="w-full bg-cream-50 text-cream-800 text-sm rounded border-cream-300 p-2 focus:ring-accent-500 focus:border-accent-500">
+                </div>
+
+                <!-- Export Path -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-cream-500 uppercase tracking-widest">Export Destination</label>
+                    <input type="text" x-model="exportPath" placeholder="C:\Filtered_Photos"
+                        class="w-full bg-white text-sm border-cream-300 rounded-lg p-2.5 shadow-sm focus:ring-green-500 focus:border-green-500 focus:outline-none">
+                </div>
+
+                <!-- Preview -->
+                <div class="bg-cream-50 p-4 rounded-xl border border-cream-200 shadow-inner">
+                    <p class="text-xs font-bold text-cream-400 uppercase mb-2">Change Preview</p>
+                    <template x-if="firstSelected">
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-cream-600">Current:</span>
+                                <span class="font-mono text-cream-800"
+                                    x-text="formatDate(firstSelected.current_date)"></span>
+                            </div>
+                            <div
+                                class="flex justify-between text-xs font-bold text-green-600 pt-2 border-t border-cream-200 mt-1">
+                                <span>New:</span>
+                                <span class="font-mono" x-text="getPreviewDate(firstSelected)"></span>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="!firstSelected">
+                        <p class="text-xs text-cream-400 italic">Select a file...</p>
+                    </template>
+                </div>
+
+                <!-- WARNING: Incompatible Files -->
+                <template x-if="incompatibleCount > 0">
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                        <div class="flex items-start space-x-2">
+                            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                                </path>
+                            </svg>
+                            <div>
+                                <p class="text-xs font-bold text-amber-800">Uyarı</p>
+                                <p class="text-xs text-amber-700">
+                                    <span x-text="incompatibleCount"></span> seçili dosyada
+                                    <span x-show="mode === 'exif'">EXIF veya dosya adında tarih bilgisi</span>
+                                    <span x-show="mode === 'filename'">dosya adında tarih</span>
+                                    <span x-show="mode === 'manual'">manuel tarih</span>
+                                    bulunamadı. Bu dosyalar belirsiz olarak işaretlenir ve atlanır.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Action -->
+                <button @click="confirmApply()"
+                    :disabled="processing || selectedIndices.size === 0 || !exportPath || (mode !== 'manual' && compatibleCount === 0)"
+                    class="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-lg shadow-md hover:shadow-lg transform active:scale-95 transition-all text-sm uppercase tracking-wide">
+                    Export & Fix Files
+                </button>
+
+            </div>
+        </aside>
+
+        <!-- Gallery -->
+        <div class="flex-1 overflow-y-auto p-6 bg-cream-50" @click.self="clearSelection()">
+
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 select-none outline-none"
+                tabindex="0" @keydown.ctrl.a.prevent="selectAll()">
+                <template x-for="(file, index) in visibleFiles" :key="file.path">
+                    <div class="relative group rounded-xl overflow-hidden cursor-pointer transition-all duration-200 bg-white border shadow-sm"
+                        :class="selectedIndices.has(index) ? 'border-accent-500 ring-2 ring-accent-500 shadow-md transform scale-[1.02]' : (isCurrentModeIncompatible(file) ? 'border-amber-300 bg-amber-50/30' : 'border-cream-200 hover:border-accent-300 hover:shadow-md')"
+                        @mouseenter="showHoverPreview(file, $event)"
+                        @mousemove="moveHoverPreview($event)"
+                        @mouseleave="hideHoverPreview()"
+                        @click="select(index, $event)">
+
+                        <!-- Thumbnail Wrapper -->
+                        <div
+                            class="h-24 bg-cream-100 flex items-center justify-center relative overflow-hidden">
+                            <img x-show="!isPreviewFailed(file.path)"
+                                :src="getThumbnailUrl(file, 220)"
+                                :alt="file.name"
+                                class="h-full w-full object-cover"
+                                loading="lazy"
+                                @error="markPreviewFailed(file.path)">
+                            <div x-show="isPreviewFailed(file.path)" class="text-4xl opacity-20 text-cream-800">CAM</div>
+                            <div x-show="isVideoFile(file.path)"
+                                class="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 text-white text-[10px] font-bold tracking-wide">VIDEO</div>
+                        </div>
+
+                        <!-- Info -->
+                        <div class="p-3 space-y-2">
+                            <p class="text-xs font-semibold text-cream-900 truncate" x-text="file.name"
+                                :title="file.name"></p>
+
+                            <div class="flex justify-between items-center text-[10px] text-cream-500 font-mono">
+                                <span x-text="formatDateShort(file.current_date)"></span>
+                            </div>
+
+                            <!-- Tag Badges -->
+                            <div class="flex gap-1 flex-wrap">
+                                <span x-show="file.exif_date"
+                                    class="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[9px] font-bold tracking-tight">EXIF</span>
+                                <span x-show="file.filename_date"
+                                    class="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[9px] font-bold tracking-tight">NAME</span>
+                                <span x-show="isCurrentModeIncompatible(file)"
+                                    class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[9px] font-bold tracking-tight">SKIP</span>
+                            </div>
+                        </div>
+
+                        <!-- Selection Overlay (Subtle tint) -->
+                        <div x-show="selectedIndices.has(index)"
+                            class="absolute inset-0 bg-accent-500/10 pointer-events-none"></div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex flex-col items-center gap-3 mt-4" x-show="files.length > visibleFiles.length">
+                <p class="text-xs text-cream-600">
+                    Gosterilen dosya: <span class="font-bold" x-text="visibleFiles.length"></span> / <span
+                        class="font-bold" x-text="files.length"></span>
+                </p>
+                <button @click="loadMoreFiles()"
+                    class="px-4 py-2 bg-white border border-cream-300 text-cream-800 rounded-lg hover:bg-cream-100 text-sm font-medium">
+                    Daha Fazla Yukle
+                </button>
+            </div>
+
+            <template x-if="files.length === 0">
+                <div class="h-full flex flex-col items-center justify-center text-cream-300">
+                    <p class="text-xl">No files loaded.</p>
+                </div>
+            </template>
+
+        </div>
+
+    </div>
+
+    <div x-show="hoverPreview.open" x-cloak class="fixed z-50 pointer-events-none">
+        <div class="rounded-xl overflow-hidden shadow-2xl border border-cream-300 bg-white w-[320px]"
+            :style="`left:${hoverPreview.x}px; top:${hoverPreview.y}px; position:fixed;`">
+            <template x-if="hoverPreview.type === 'video'">
+                <video :src="hoverPreview.url" class="w-full h-[260px] object-cover" autoplay muted loop playsinline
+                    preload="metadata" @error="hideHoverPreview()"></video>
+            </template>
+            <template x-if="hoverPreview.type !== 'video'">
+                <img :src="hoverPreview.url" :alt="hoverPreview.name" class="w-full h-[260px] object-cover"
+                    @error="hideHoverPreview()">
+            </template>
+            <div class="px-3 py-2 text-xs text-cream-800 truncate" x-text="hoverPreview.name"></div>
+        </div>
+    </div>
+
+    <!-- MODAL -->
+    <div x-show="modal.open" x-cloak
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" x-transition.opacity>
+
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all"
+            x-transition.scale.origin.bottom>
+
+            <div class="px-6 py-4 bg-cream-50 border-b border-cream-100">
+                <h3 class="text-lg font-bold text-cream-900" x-text="modal.title"></h3>
+            </div>
+
+            <div class="px-6 py-6">
+                <p class="text-cream-700 text-sm leading-relaxed" x-text="modal.message"></p>
+            </div>
+
+            <div class="px-6 py-4 bg-cream-50 flex justify-end space-x-2">
+                <button @click="cancelModal()"
+                    class="px-4 py-2 border border-cream-300 text-cream-600 rounded-lg hover:bg-cream-100 text-sm font-medium">
+                    Cancel
+                </button>
+                <div x-show="modal.showApprove">
+                    <button @click="approveModal()"
+                        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium shadow-sm">
+                        Approve
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('dateFixer', () => ({
+                scanPath: '',
+                exportPath: '',
+                files: [],
+                selectedIndices: new Set(),
+                lastSelectedIndex: null,
+                mode: 'exif',
+                manualDate: '',
+                processing: false,
+                modal: { open: false, title: '', message: '', confirmFn: null, showApprove: false },
+                failedPreviews: {},
+                previewVersion: Date.now(),
+                hoverPreview: { open: false, url: '', name: '', type: 'image', x: 16, y: 16 },
+                hoverDelayTimer: null,
+                fileRenderLimit: 240,
+                fileRenderStep: 180,
+
+                get firstSelected() {
+                    if (this.selectedIndices.size === 0) return null;
+                    const idx = this.selectedIndices.values().next().value;
+                    return this.files[idx];
+                },
+
+                get visibleFiles() {
+                    return this.files.slice(0, this.fileRenderLimit);
+                },
+
+                // Count files that CAN be processed with current mode
+                get compatibleCount() {
+                    if (this.mode === 'manual') return this.selectedIndices.size; // Manual always works
+
+                    let count = 0;
+                    for (const idx of this.selectedIndices) {
+                        const file = this.files[idx];
+                        if (this.mode === 'exif' && (file.exif_date || file.filename_date)) count++;
+                        else if (this.mode === 'filename' && file.filename_date) count++;
+                    }
+                    return count;
+                },
+
+                // Count files that CANNOT be processed with current mode
+                get incompatibleCount() {
+                    return this.selectedIndices.size - this.compatibleCount;
+                },
+
+                isFileCompatible(file, mode = this.mode) {
+                    if (mode === 'manual') return true;
+                    if (mode === 'exif') return !!(file.exif_date || file.filename_date);
+                    if (mode === 'filename') return !!file.filename_date;
+                    return false;
+                },
+
+                isCurrentModeIncompatible(file) {
+                    return !this.isFileCompatible(file, this.mode);
+                },
+
+                shouldUseFilenameInExifMode(file) {
+                    if (!file.filename_date) return false;
+                    if (!file.exif_date) return true;
+                    const exifYear = new Date(file.exif_date).getFullYear();
+                    const nameYear = new Date(file.filename_date).getFullYear();
+                    if (!Number.isFinite(exifYear) || !Number.isFinite(nameYear)) return false;
+                    return exifYear > nameYear;
+                },
+
+
+                notify(title, message) {
+                    this.modal.title = title;
+                    this.modal.message = message;
+                    this.modal.confirmFn = null;
+                    this.modal.showApprove = false;
+                    this.modal.open = true;
+                },
+
+                ask(title, message, callback) {
+                    this.modal.title = title;
+                    this.modal.message = message;
+                    this.modal.confirmFn = callback;
+                    this.modal.showApprove = true;
+                    this.modal.open = true;
+                },
+
+                cancelModal() {
+                    this.modal.open = false;
+                    this.modal.confirmFn = null;
+                    this.modal.showApprove = false;
+                },
+
+                approveModal() {
+                    const action = this.modal.confirmFn;
+                    this.modal.open = false;
+                    this.modal.confirmFn = null;
+                    this.modal.showApprove = false;
+                    if (action) action();
+                },
+
+                formatDate(isoStr) {
+                    if (!isoStr) return '-';
+                    return new Date(isoStr).toLocaleString();
+                },
+
+                formatDateShort(isoStr) {
+                    if (!isoStr) return '-';
+                    const d = new Date(isoStr);
+                    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear().toString().substr(-2)}`;
+                },
+
+                getPreviewDate(file) {
+                    if (this.mode === 'manual' && this.manualDate) return new Date(this.manualDate).toLocaleString();
+                    if (this.mode === 'exif' && this.shouldUseFilenameInExifMode(file)) return this.formatDate(file.filename_date);
+                    if (this.mode === 'exif' && file.exif_date) return this.formatDate(file.exif_date);
+                    if (this.mode === 'exif' && !file.exif_date && file.filename_date) return this.formatDate(file.filename_date);
+                    if (this.mode === 'filename' && file.filename_date) return this.formatDate(file.filename_date);
+                    return "No Change";
+                },
+
+                getPreviewUrl(path) {
+                    return `/api/metadata/preview?path=${encodeURIComponent(path)}&v=${this.previewVersion}`;
+                },
+
+                getThumbnailUrl(file, size = 220) {
+                    return `/api/metadata/thumbnail?path=${encodeURIComponent(file.path)}&size=${size}&v=${this.previewVersion}`;
+                },
+
+                getFileExt(path) {
+                    const idx = path.lastIndexOf('.');
+                    return idx >= 0 ? path.substring(idx).toLowerCase() : '';
+                },
+
+                isVideoFile(path) {
+                    const ext = this.getFileExt(path);
+                    return ['.mp4', '.mov', '.m4v', '.avi', '.mkv', '.webm', '.3gp'].includes(ext);
+                },
+
+                isPreviewFailed(path) {
+                    return !!this.failedPreviews[path];
+                },
+
+                markPreviewFailed(path) {
+                    this.failedPreviews[path] = true;
+                    this.failedPreviews = { ...this.failedPreviews };
+                },
+
+                showHoverPreview(file, event) {
+                    if (this.isPreviewFailed(file.path)) return;
+                    if (this.hoverDelayTimer) clearTimeout(this.hoverDelayTimer);
+                    this.hoverDelayTimer = setTimeout(() => {
+                        this.hoverPreview.open = true;
+                        this.hoverPreview.url = this.getPreviewUrl(file.path);
+                        this.hoverPreview.name = file.name;
+                        this.hoverPreview.type = this.isVideoFile(file.path) ? 'video' : 'image';
+                    }, 120);
+                    this.moveHoverPreview(event);
+                },
+
+                moveHoverPreview(event) {
+                    const boxWidth = 320;
+                    const boxHeight = 320;
+                    const offset = 16;
+                    let x = event.clientX + offset;
+                    let y = event.clientY + offset;
+                    if (x + boxWidth > window.innerWidth) x = event.clientX - boxWidth - offset;
+                    if (y + boxHeight > window.innerHeight) y = event.clientY - boxHeight - offset;
+                    this.hoverPreview.x = Math.max(8, x);
+                    this.hoverPreview.y = Math.max(8, y);
+                },
+
+                hideHoverPreview() {
+                    if (this.hoverDelayTimer) clearTimeout(this.hoverDelayTimer);
+                    this.hoverPreview.open = false;
+                },
+
+                loadMoreFiles() {
+                    this.fileRenderLimit = Math.min(this.files.length, this.fileRenderLimit + this.fileRenderStep);
+                },
+
+                async scan() {
+                    if (!this.scanPath) return;
+                    this.processing = true;
+                    try {
+                        const res = await fetch(`/api/metadata/scan?path=${encodeURIComponent(this.scanPath)}`, { method: 'POST' });
+                        if (res.ok) {
+                            this.files = await res.json();
+                            this.selectedIndices.clear();
+                            this.failedPreviews = {};
+                            this.previewVersion = Date.now();
+                            this.fileRenderLimit = 240;
+                        } else {
+                            throw new Error("Scan failed");
+                        }
+                    } catch (e) {
+                        this.notify("Error", e.message);
+                    } finally {
+                        this.processing = false;
+                    }
+                },
+
+                select(index, event) {
+                    if (event.ctrlKey || event.metaKey) {
+                        if (this.selectedIndices.has(index)) {
+                            this.selectedIndices.delete(index);
+                        } else {
+                            this.selectedIndices.add(index);
+                        }
+                        this.lastSelectedIndex = index;
+                    } else if (event.shiftKey && this.lastSelectedIndex !== null) {
+                        const start = Math.min(this.lastSelectedIndex, index);
+                        const end = Math.max(this.lastSelectedIndex, index);
+                        this.selectedIndices.clear();
+                        for (let i = start; i <= end; i++) this.selectedIndices.add(i);
+                    } else {
+                        this.selectedIndices.clear();
+                        this.selectedIndices.add(index);
+                        this.lastSelectedIndex = index;
+                    }
+                    this.selectedIndices = new Set(this.selectedIndices);
+                },
+
+                selectAll() {
+                    this.files.forEach((_, i) => this.selectedIndices.add(i));
+                    this.selectedIndices = new Set(this.selectedIndices);
+                },
+
+                clearSelection() {
+                    this.selectedIndices.clear();
+                    this.selectedIndices = new Set();
+                },
+
+                confirmApply() {
+                    const count = this.selectedIndices.size;
+                    const skipped = this.incompatibleCount;
+                    this.ask(
+                        "Confirm Export & Update",
+                        `You are about to process ${count} files to "${this.exportPath}". Skipped: ${skipped}. Proceed?`,
+                        () => this.runApply()
+                    );
+                },
+
+                async runApply() {
+                    const selectedFiles = Array.from(this.selectedIndices).map(i => this.files[i]);
+                    const compatibleFiles = selectedFiles.filter(f => this.isFileCompatible(f, this.mode));
+                    const skippedCount = selectedFiles.length - compatibleFiles.length;
+                    const filesToUpdate = compatibleFiles.map(f => f.path);
+
+                    if (filesToUpdate.length === 0) {
+                        this.notify("Skipped", "No compatible files found. Selected files were skipped.");
+                        return;
+                    }
+
+                    const payload = {
+                        files: filesToUpdate,
+                        mode: this.mode,
+                        manual_date: this.manualDate || null,
+                        export_path: this.exportPath
+                    };
+
+                    this.processing = true;
+                    try {
+                        const res = await fetch('/api/metadata/apply', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const result = await res.json();
+
+                        if (!res.ok) {
+                            // Handle error response
+                            this.notify("Error", result.detail || "An error occurred");
+                            return;
+                        }
+
+                        // Show detailed report including error reasons
+                        let message = `Success: ${result.success}, Failed: ${result.failed}, Skipped: ${skippedCount}`;
+                        if (result.errors && result.errors.length > 0) {
+                            message += `\n\nErrors:\n${result.errors.join('\n')}`;
+                        }
+                        this.notify("Report", message);
+                        await this.scan(); // Refresh
+                    } catch (e) {
+                        this.notify("Error", e.message);
+                    } finally {
+                        this.processing = false;
+                    }
+                }
+
+
+            }))
+        });
+    </script>
+</body>
+
+</html>
