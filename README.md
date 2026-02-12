@@ -1,65 +1,57 @@
-# Imager (Local Duplicate Organizer + Date Fixer)
+# Local Media Organizer
 
-Yerel (offline) çalisan, medya odakli bir dosya düzenleme aracidir.
+A local-first toolkit for organizing duplicate media and fixing date metadata safely.
 
-- **Duplicate Organizer**: Ayni içerige sahip dosyalari gruplar, "orijinal" seçtirir, sadece seçilenleri export klasörüne kopyalar.
-- **Date Fixer**: EXIF / filename / manual modlarinda tarih düzeltme yapar, degisiklikleri export kopyalara uygular.
+This project is designed for privacy-conscious users who want full control over their files. It runs on your machine, works offline, and avoids destructive operations in source folders.
 
-> Tasarim hedefi: **kaynak dosyalari silmeden, güvenli export akisi**.
+## What It Does
 
----
+### 1. Duplicate Organizer
+- Scans a selected folder and groups duplicate files.
+- Lets you mark one file as the original in each group.
+- Supports "Mark Recommended" for faster selection.
+- Exports selected originals to a target directory.
 
-## Özellikler
+### 2. Date Fixer
+- Processes photos and videos using one of three modes:
+  - EXIF mode
+  - Filename mode
+  - Manual date mode
+- Writes permanent metadata updates on exported copies.
+- Clearly marks unresolved files as `SKIP`.
 
-- Duplicate tespiti: boyut + `xxhash` içerik hash
-- Görsel + video thumbnail (video için ffmpeg)
-- Hover büyük önizleme (videoda autoplay)
-- `Mark Recommended` ile grup basina önerilen orijinal seçimi
-- Büyük veri için parça parça yükleme (pagination/load more)
-- Date Fixer EXIF karar motoru:
-  - EXIF öncelikli
-  - EXIF yili filename yilindan ilerideyse filename tarihi esas
-  - EXIF yoksa filename tarihi EXIF'e kalici yazilir
-  - EXIF + filename tarih yoksa dosya `SKIP`
-- Onay akisi: `Cancel + Approve` (iki sayfada da)
-- Islem sirasinda görünür `Processing...` göstergesi
+## Safety & Privacy Model
 
----
+This application follows a strict safety model:
 
-## Güvenlik ve Gizlilik
+- Source files are never deleted.
+- Source files are not modified in-place.
+- Export files keep original names.
+- Name collisions are handled safely using suffixes like `(2)`, `(3)`.
+- API access is restricted to localhost.
+- Media preview routes are limited to scanned roots.
 
-Bu proje GitHub'a açik paylasim öncesi su önlemleri içerir:
+In short: no cloud upload, no telemetry, no external file sharing.
 
-1. **Localhost erisim kisiti**
-- API yalnizca `127.0.0.1 / ::1 / localhost` isteklerini kabul eder.
-- Dis agdan erisim engellenir.
+## Core Rules in EXIF Mode
 
-2. **Izinli kök dizin kontrolü**
-- `preview`, `thumbnail`, `metadata/apply` endpoint'leri yalnizca taranmis kök klasör altindaki dosyalara izin verir.
-- Keyfi path ile dosya okuma/yazma engellenir.
+The current date resolution logic is:
 
-3. **Kaynak dosya güvenligi**
-- Kaynak dosyalar silinmez.
-- Islemler export kopya üzerinde yapilir.
+1. EXIF is the primary source.
+2. If EXIF year and filename year match, EXIF is kept.
+3. If EXIF year is later than filename year, filename date is used.
+4. If EXIF is missing, filename date is used when available.
+5. If both EXIF and filename date are missing, the file is skipped.
 
-4. **Overwrite korumasi**
-- Export sirasinda orijinal dosya adi korunur.
-- Hedefte isim çakisirsa güvenli suffix (`(2)`, `(3)`) eklenir.
+For videos, image EXIF writing is not attempted. File system timestamps are updated instead.
 
-5. **Git'e hassas/yerel veri gönderimini engelleme**
-- `.gitignore` ile `venv/`, `files.db`, `memory-bank/thumb-cache/` vb. disarida birakilir.
-
----
-
-## Gereksinimler
+## Requirements
 
 - Python 3.10+
-- Windows (ana hedef ortam)
-- ffmpeg (video thumbnail için)
+- Windows (primary target)
+- `ffmpeg` (required for video thumbnails)
 
----
-
-## Kurulum
+## Installation
 
 ```powershell
 python -m venv venv
@@ -67,59 +59,45 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-ffmpeg kontrolü:
+Optional check:
 
 ```powershell
 ffmpeg -version
 ```
 
----
+## Run
 
-## Çalistirma
-
-### Seçenek 1 (önerilen)
+### Option A (recommended)
 
 ```powershell
 run_app.bat
 ```
 
-### Seçenek 2
+### Option B
 
 ```powershell
 venv\Scripts\python -m uvicorn app.main:app --reload
 ```
 
-Ardindan tarayici:
+Then open:
 
-- `http://127.0.0.1:8000`
+- http://127.0.0.1:8000
 
----
+## Basic Usage
 
-## Kullanim
+### Duplicate Organizer
+1. Enter a source path and run scan.
+2. Use manual selection or **Mark Recommended**.
+3. Set export destination.
+4. Click **Export Selected** and approve.
 
-### 1) Duplicate Organizer
+### Date Fixer
+1. Enter a source path and run scan.
+2. Choose mode (EXIF / Filename / Manual).
+3. Set export destination.
+4. Click **Export & Fix Files** and approve.
 
-1. Source klasörü gir, `Start Scan`
-2. Istersen `Mark Recommended`
-3. Grupta gerekli düzeltmeleri yap
-4. Export hedef klasörü gir
-5. `Export Selected` -> `Approve`
-
-### 2) Date Fixer
-
-1. `Date Fixer` sayfasina geç
-2. Source klasörü gir, `Scan`
-3. Mod seç (`EXIF`, `Filename`, `Manual`)
-4. Export hedef klasörü gir
-5. `Export & Fix Files` -> `Approve`
-
-Notlar:
-- `SKIP` etiketli dosyalar mevcut moda göre islenemez ve atlanir.
-- Video dosyalarda EXIF yazimi yapilmaz; tarih dosya sistemi zamanina uygulanir.
-
----
-
-## API Özeti
+## API Overview
 
 - `POST /api/scan`
 - `GET /api/duplicates_page`
@@ -131,51 +109,36 @@ Notlar:
 - `GET /api/metadata/thumbnail`
 - `POST /api/metadata/apply`
 
----
+## Performance Notes
 
-## Performans Notlari
+- Duplicate groups are loaded incrementally.
+- Thumbnails are cached on disk.
+- Hover preview is optimized for large datasets.
 
-- Duplicate listesi kademeli yüklenir.
-- Thumbnail'ler cache'lenir (`memory-bank/thumb-cache`).
-- Çok büyük klasörlerde ilk tarama süresi dogal olarak uzayabilir.
+## Troubleshooting
 
----
+### "EXIF write failed" on video files
+That behavior is expected with image EXIF libraries. The app now applies file system timestamp updates for videos instead.
 
-## Hata Giderme
+### "Path is not in allowed scanned roots"
+Scan the source directory again and retry.
 
-### Video dosyada "EXIF write failed" hatasi
-Yeni sürümde video dosyalarda EXIF yazimi denenmez. Eger eski davranis görürsen:
+## Screenshots
 
-1. Sunucuyu kapat/aç
-2. Tarayicida `Ctrl+F5` yap
-
-### `403 Path is not in allowed scanned roots`
-Önce ilgili klasörü uygulama içinden tekrar `Scan` et.
-
----
-
-## Ekran Görüntüleri
-
-> Bu bölüm bilerek bos birakilmistir. Screenshot'lari eklemek için asagidaki basliklari kullanabilirsiniz.
+> Add screenshots in this section before publishing.
 
 ### Duplicate Organizer
 
-<!-- screenshot buraya -->
+<!-- Add screenshot here -->
 
 ### Date Fixer
 
-<!-- screenshot buraya -->
+<!-- Add screenshot here -->
 
-### Mark Recommended Akisi
+### Recommendation Flow
 
-<!-- screenshot buraya -->
+<!-- Add screenshot here -->
 
-### Security / Privacy Notlari
+## License
 
-<!-- screenshot buraya -->
-
----
-
-## Lisans
-
-Lisans bilgisini burada belirtin.
+Choose and add your license before publishing.
