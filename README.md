@@ -125,20 +125,18 @@ Scan the source directory again and retry.
 
 ## Screenshots
 
-> Add screenshots in this section before publishing.
-
 ### Duplicate Organizer
 
-<!-- Add screenshot here -->
+![Duplicate Organizer](./local-media-organizer.png)
 
 ### Date Fixer
 
-<!-- Add screenshot here -->
-
-### Recommendation Flow
-
-<!-- Add screenshot here -->
+![Date Fixer](./local-media-organizer-2.png)
 
 ## License
 
-Choose and add your license before publishing.
+This project is licensed under the **MIT License**.
+
+You are free to use, modify, and redistribute this project, including in commercial use, as long as the original copyright and license notice are preserved.
+
+See `LICENSE` for the full text.
