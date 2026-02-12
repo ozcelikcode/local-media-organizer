@@ -12,7 +12,12 @@ import hashlib
 import subprocess
 import re
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except Exception:
+    pillow_heif = None
 
 from app.core.scanner import FileScanner
 from app.core.metadata import MetadataService
@@ -36,10 +41,16 @@ async def localhost_only(request: Request, call_next):
         return JSONResponse(status_code=403, content={"detail": "Access restricted to localhost"})
     return await call_next(request)
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
+IMAGE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff",
+    ".heic", ".heif", ".avif", ".jxl",
+    ".dng", ".arw", ".cr2", ".cr3", ".nef", ".nrw", ".raf", ".rw2", ".orf", ".srw", ".pef",
+    ".3fr", ".iiq", ".erf", ".kdc", ".mrw", ".raw",
+}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".3gp"}
 MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 THUMB_CACHE_DIR = os.path.join("memory-bank", "thumb-cache")
+THUMB_CACHE_VERSION = "v2-heif-orientation"
 os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
 ALLOWED_SOURCE_ROOTS: set[str] = set()
 
@@ -99,28 +110,29 @@ def _unique_destination_path(directory: str, filename: str) -> str:
 def _thumbnail_cache_path(path: str, size: int) -> str:
     try:
         stat = os.stat(path)
-        cache_key = f"{os.path.abspath(path)}|{size}|{stat.st_mtime_ns}|{stat.st_size}"
+        cache_key = f"{THUMB_CACHE_VERSION}|{os.path.abspath(path)}|{size}|{stat.st_mtime_ns}|{stat.st_size}"
     except OSError:
-        cache_key = f"{os.path.abspath(path)}|{size}|missing"
+        cache_key = f"{THUMB_CACHE_VERSION}|{os.path.abspath(path)}|{size}|missing"
     digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
     return os.path.join(THUMB_CACHE_DIR, f"{digest}.jpg")
 
 
-def _create_image_thumbnail(src_path: str, dst_path: str, size: int) -> bool:
+def _create_image_thumbnail(src_path: str, dst_path: str, size: int, quality: int = 62) -> bool:
     try:
         with Image.open(src_path) as img:
+            img = ImageOps.exif_transpose(img)
             if img.mode not in ("RGB", "L"):
                 img = img.convert("RGB")
             elif img.mode == "L":
                 img = img.convert("RGB")
             img.thumbnail((size, size))
-            img.save(dst_path, format="JPEG", quality=82, optimize=True)
+            img.save(dst_path, format="JPEG", quality=quality, optimize=False)
         return True
     except (UnidentifiedImageError, OSError, ValueError):
         return False
 
 
-def _create_video_thumbnail(src_path: str, dst_path: str, size: int) -> bool:
+def _create_video_thumbnail(src_path: str, dst_path: str, size: int, quality: int = 4) -> bool:
     ffmpeg_cmd = [
         "ffmpeg",
         "-hide_banner",
@@ -135,7 +147,39 @@ def _create_video_thumbnail(src_path: str, dst_path: str, size: int) -> bool:
         "-vf",
         f"scale={size}:-1:force_original_aspect_ratio=decrease",
         "-q:v",
-        "3",
+        str(quality),
+        "-y",
+        dst_path,
+    ]
+    try:
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=12, check=False)
+        return result.returncode == 0 and os.path.isfile(dst_path)
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+
+def _create_media_thumbnail(src_path: str, dst_path: str, size: int, quality: int = 62) -> bool:
+    if _is_video(src_path):
+        return _create_video_thumbnail(src_path, dst_path, size, quality=4)
+
+    if _create_image_thumbnail(src_path, dst_path, size, quality=quality):
+        return True
+
+    # Fallback for formats Pillow may not decode (HEIC/RAW variants).
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        src_path,
+        "-frames:v",
+        "1",
+        "-vf",
+        f"scale={size}:-1:force_original_aspect_ratio=decrease",
+        "-q:v",
+        "4",
         "-y",
         dst_path,
     ]
@@ -422,7 +466,16 @@ def metadata_preview(path: str):
     if not _is_media(normalized_path):
         raise HTTPException(status_code=400, detail="Unsupported media format")
 
-    return _safe_media_response(normalized_path)
+    if _is_video(normalized_path):
+        return _safe_media_response(normalized_path)
+
+    preview_size = 900
+    preview_cache = _thumbnail_cache_path(normalized_path, preview_size)
+    if not os.path.isfile(preview_cache):
+        ok = _create_media_thumbnail(normalized_path, preview_cache, preview_size, quality=74)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Preview generation failed")
+    return FileResponse(preview_cache, media_type="image/jpeg")
 
 
 @app.get("/api/metadata/thumbnail")
@@ -443,7 +496,7 @@ def metadata_thumbnail(path: str, size: int = 240):
     cache_path = _thumbnail_cache_path(normalized_path, size)
 
     if not os.path.isfile(cache_path):
-        ok = _create_video_thumbnail(normalized_path, cache_path, size) if _is_video(normalized_path) else _create_image_thumbnail(normalized_path, cache_path, size)
+        ok = _create_media_thumbnail(normalized_path, cache_path, size, quality=62)
         if not ok:
             raise HTTPException(status_code=500, detail="Thumbnail generation failed")
 
@@ -482,3 +535,5 @@ def apply_metadata_changes(req: DateUpdateRequest):
             results["errors"].append(f"{os.path.basename(path)}: {msg}")
             
     return results
+
+

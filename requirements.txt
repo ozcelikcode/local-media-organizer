@@ -5,4 +5,5 @@ xxhash
 aiofiles
 python-multipart
 Pillow
+pillow-heif
 pywin32

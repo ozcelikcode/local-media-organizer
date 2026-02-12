@@ -199,12 +199,12 @@
 
                                     <div class="mb-3 h-28 rounded-lg bg-cream-100 overflow-hidden flex items-center justify-center relative">
                                         <img x-show="!isPreviewFailed(file.path)"
-                                            :src="getThumbnailUrl(file, 240)"
+                                            :src="getThumbnailUrl(file, 180)"
                                             :alt="file.name"
-                                            class="h-full w-full object-cover"
+                                            class="h-full w-full object-contain"
                                             loading="lazy"
                                             @error="markPreviewFailed(file.path)">
-                                        <div x-show="isPreviewFailed(file.path)" class="text-xl opacity-30 text-cream-800">CAM</div>
+                                        <div x-show="isPreviewFailed(file.path)" class="text-xs opacity-50 text-cream-800">No preview</div>
                                         <div x-show="isVideoFile(file.path)"
                                             class="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 text-white text-[10px] font-bold tracking-wide">VIDEO</div>
                                     </div>
@@ -267,14 +267,14 @@
     </div>
 
     <div x-show="hoverPreview.open" x-cloak class="fixed z-50 pointer-events-none">
-        <div class="rounded-xl overflow-hidden shadow-2xl border border-cream-300 bg-white w-[320px]"
+        <div class="rounded-xl overflow-hidden shadow-2xl border border-cream-300 bg-white w-[300px]"
             :style="`left:${hoverPreview.x}px; top:${hoverPreview.y}px; position:fixed;`">
             <template x-if="hoverPreview.type === 'video'">
-                <video :src="hoverPreview.url" class="w-full h-[260px] object-cover" autoplay muted loop playsinline
+                <video :src="hoverPreview.url" class="w-full h-[220px] object-contain bg-black" autoplay muted loop playsinline
                     preload="metadata" @error="hideHoverPreview()"></video>
             </template>
             <template x-if="hoverPreview.type !== 'video'">
-                <img :src="hoverPreview.url" :alt="hoverPreview.name" class="w-full h-[260px] object-cover"
+                <img :src="hoverPreview.url" :alt="hoverPreview.name" class="w-full h-[220px] object-contain bg-cream-100"
                     @error="hideHoverPreview()">
             </template>
             <div class="px-3 py-2 text-xs text-cream-800 truncate" x-text="hoverPreview.name"></div>
@@ -558,3 +558,4 @@
 </body>
 
 </html>
+
